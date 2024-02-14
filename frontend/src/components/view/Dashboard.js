@@ -1,143 +1,144 @@
-// Importieren der notwendigen Pakete und Komponenten
-import React, { useEffect, useState } from 'react';
-import axios from 'axios';
-import { Bar, Doughnut} from 'react-chartjs-2';
-import { Chart, DoughnutController, BarController, BarElement, ArcElement, LinearScale, CategoryScale, Tooltip } from 'chart.js';
+import React, { useState, useEffect, useCallback } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 
-// Registriert die benötigten Module bei chart.js.
-Chart.register(DoughnutController, BarController, BarElement, ArcElement, LinearScale, CategoryScale, Tooltip);
+import icon from 'leaflet/dist/images/marker-icon.png';
+import iconShadow from 'leaflet/dist/images/marker-shadow.png';
 
-// Die Dashboard-Komponente, die verschiedene Diagramme und Metriken anzeigt.
+let DefaultIcon = L.icon({
+    iconUrl: icon,
+    shadowUrl: iconShadow,
+});
+
+L.Marker.prototype.options.icon = DefaultIcon;
+
+function LocationMarker({ setPosition }) {
+    useMapEvents({
+        click(e) {
+            setPosition([e.latlng.lat, e.latlng.lng]);
+        },
+    });
+
+    return null;
+}
+
 const Dashboard = () => {
+    // Anfangsposition auf einen zentralen Punkt in Deutschland gesetzt und Zoom angepasst
+    const [position, setPosition] = useState([51.1657, 10.4515]); // Geographische Mitte Deutschlands
+    const [zoom] = useState(6); // Angepasster Zoom-Wert für eine Übersicht über Deutschland
+    const [pollenData, setPollenData] = useState(null);
+    const [regionName, setRegionName] = useState('');
 
-    // Verwendet den useState-Hook von React, um den Zustand der Komponente zu verwalten.
-    const [kundenAnzahl, setKundenAnzahl] = useState(0);
-    const [buchungen, setBuchungen] = useState([]);
-    const [fahrzeuge, setFahrzeuge] = useState([]);
-
-    // Verwendet den useEffect-Hook, um Daten zu holen, wenn die Komponente gemountet wird.
-    useEffect(() => {
-        // Funktion, um Daten von der Server-API zu holen.
-        const fetchData = async () => {
-            const responseKunden = await axios.get('/kunden');
-            setKundenAnzahl(responseKunden.data.length);
-
-            const responseBuchungen = await axios.get('/buchungen');
-            setBuchungen(responseBuchungen.data);
-
-            const responseFahrzeuge = await axios.get('/fahrzeuge');
-            setFahrzeuge(responseFahrzeuge.data);
-        };
-
-        fetchData();
-    }, []);
-
-    // Berechnungen für die verschiedenen Kennzahlen
-    const currentMonth = new Date().getMonth();
-    const currentMonthBookings = buchungen.filter(
-        (buchung) =>
-            new Date(buchung.startdatum).getMonth() === currentMonth
-    ).length;
-
-    const fahrzeugStandorte = fahrzeuge.reduce((acc, fahrzeug) => {
-        const { standort } = fahrzeug;
-        const standortName = standort.name;
-        const kapazitaet = standort.kapazitaet;
-        const index = acc.findIndex((item) => item.standort === standortName);
-        if (index === -1) {
-            acc.push({ standort: standortName, count: 1, kapazitaet });
-        } else {
-            acc[index].count += 1;
+    const updateLocationInfo = useCallback(async (latitude, longitude) => {
+        const region = await getRegionNameFromCoords(latitude, longitude);
+        setRegionName(region);
+        if (region) {
+            fetchPollenDataForRegion(region);
         }
-        return acc;
     }, []);
 
-    // Logik für das Erstellen und Rendern der Diagramme.
-    const createDoughnutCharts = (standorte) => {
-        return standorte.map((standort, index) => {
-            const { count, kapazitaet } = standort;
-            const data = {
-                labels: ["Fahrzeuge", "Freie Plätze"],
-                datasets: [
-                    {
-                        data: [count, kapazitaet - count],
-                        backgroundColor: ["rgba(75, 192, 192, 0.6)", "rgba(200, 200, 200, 0.6)"],
-                    },
-                ],
-            };
-
-            const options = {
-                plugins: {
-                    tooltip: {
-                        callbacks: {
-                            label: function(context) {
-                                var label = context.label || '';
-                                if (label === 'Fahrzeuge') {
-                                    label += ': ' + count;
-                                } else if (label === 'Freie Plätze') {
-                                    label += ': ' + (kapazitaet - count);
-                                }
-                                return label;
-                            }
-                        }
-                    }
-                }
-            }
-
-            return (
-                <div key={index} style={{ maxWidth: "250px", maxHeight: "250px", padding: "20px", marginBottom: "50px"}}>
-                    <h4>{standort.standort}</h4>
-                    <Doughnut data={data} options={options} width={150} height={150} />
-                </div>
-            );
-        });
+    const getRegionNameFromCoords = async (latitude, longitude) => {
+        const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=6&addressdetails=1`;
+        try {
+            const response = await fetch(url);
+            const data = await response.json();
+            return data.address.state || data.address.city;
+        } catch (error) {
+            console.error('Fehler beim Abrufen des Ortsnamens:', error);
+            return null;
+        }
     };
 
+    const fetchPollenDataForRegion = async (regionName) => {
+        const response = await fetch('/api/pollendata');
+        const data = await response.json();
+        console.info(data.content); // Ausgabe der gesamten Inhalte zur Überprüfung
 
+        // Suchen nach einer Region, deren Name den übergebenen regionName-String enthält
+        const dataForRegion = data.content.find(region =>
+            region.region_name.toLowerCase().includes(regionName.toLowerCase())
+        );
 
-    // beliebtesteFahrzeuge sortiert nach Buchungsanzahl
-    const beliebtesteFahrzeuge = fahrzeuge
-        .map((fahrzeug) => ({
-            name: fahrzeug.marke + ' ' + fahrzeug.modell,
-            buchungen: buchungen.filter(
-                (buchung) => buchung.fahrzeug.id === fahrzeug.id
-            ).length,
-        }))
-        .sort((a, b) => b.buchungen - a.buchungen);
-
-    const barData = {
-        labels: beliebtesteFahrzeuge.map((fahrzeug) => fahrzeug.name),
-        datasets: [
-            {
-                label: 'Anzahl der Buchungen',
-                data: beliebtesteFahrzeuge.map((fahrzeug) => fahrzeug.buchungen),
-                backgroundColor: 'rgba(75, 192, 192, 0.6)',
-                borderColor: 'rgba(75, 192, 192, 1)',
-                borderWidth: 1,
-            },
-        ],
+        if (dataForRegion) {
+            setPollenData(dataForRegion);
+        } else {
+            console.log(`Keine Daten für Region: ${regionName} gefunden.`);
+            setPollenData(null); // Setzen von null oder einem leeren Objekt, falls keine Übereinstimmung gefunden wurde
+        }
     };
 
+    useEffect(() => {
+        if ('geolocation' in navigator) {
+            navigator.geolocation.getCurrentPosition(async (position) => {
+                setPosition([position.coords.latitude, position.coords.longitude]);
+                updateLocationInfo(position.coords.latitude, position.coords.longitude);
+            }, () => {
+                alert('Standortzugriff wurde verweigert oder es ist ein Fehler aufgetreten.');
+            });
+        } else {
+            alert('Geolocation wird von Ihrem Browser nicht unterstützt.');
+        }
+    }, [updateLocationInfo]);
+
+    useEffect(() => {
+        updateLocationInfo(position[0], position[1]);
+    }, [position, updateLocationInfo]);
 
     return (
         <div>
-            <h2 style={{padding: 25}}><b>Willkommen bei WheelsConnect!</b></h2>
-            <div>
-                <h5 style={{padding: 10}}>Aktuell sind {kundenAnzahl} Kunden bei WheelsConnect registriert.</h5>
-                <h5 style={{padding: 10}}>Im aktuellen Monat sind {currentMonthBookings} Buchungen vorhanden.</h5>
-            </div>
-            <div style={{padding: 25}}>
-                <h4><b>Standorte und die Anzahl der Fahrzeuge</b></h4>
-                <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center" }}>
-                    {createDoughnutCharts(fahrzeugStandorte)}
-                </div>
-            </div>
-            <div style={{padding: 10}}>
-                <h4><b>Die am häufigsten gebuchten Fahrzeuge</b></h4>
-                <div style={{ maxWidth: "500px", margin: "auto"}}>
-                <Bar data={barData} />
-                </div>
-            </div>
+            <h2 style={{ padding: 25 }}><b>Willkommen auf der PollenMap</b></h2>
+            <MapContainer center={position} zoom={zoom} style={{ height: '88vh', width: '100%' }}>
+                <TileLayer
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                />
+                <LocationMarker setPosition={setPosition} />
+                <Marker position={position}>
+                    <Popup>
+                        {pollenData ? (
+                            <div>
+                                <h3>{pollenData.region_name}</h3>
+                                <p>{pollenData.partregion_name}</p>
+                                <table>
+                                    <thead>
+                                    <tr>
+                                        <th>Pollenart</th>
+                                        <th>Heute</th>
+                                        <th>Morgen</th>
+                                        <th>Übermorgen</th>
+                                    </tr>
+                                    </thead>
+                                    <tbody>
+                                    {Object.entries(pollenData.Pollen).map(([pollenName, pollenValues]) => (
+                                        <tr key={pollenName}>
+                                            <td>{pollenName}</td>
+                                            <td>{pollenValues.today}</td>
+                                            <td>{pollenValues.tomorrow}</td>
+                                            <td>{pollenValues.dayafter_to}</td>
+                                        </tr>
+                                    ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ) : (
+                            <p>Lade Pollendaten...</p>
+                        )}
+                    </Popup>
+                </Marker>
+            </MapContainer>
+            {/*<div style={{ padding: 25 }}>*/}
+            {/*    <h3>Region</h3>*/}
+            {/*    <p>{regionName || 'Lade Region...'}</p>*/}
+            {/*</div>*/}
+            {/*<div style={{ padding: 25 }}>*/}
+            {/*    <h3>Pollendaten</h3>*/}
+            {/*    {pollenData ? (*/}
+            {/*        <pre>{JSON.stringify(pollenData, null, 2)}</pre>*/}
+            {/*    ) : (*/}
+            {/*        <p>Lade Daten...</p>*/}
+            {/*    )}*/}
+            {/*</div>*/}
         </div>
     );
 };
