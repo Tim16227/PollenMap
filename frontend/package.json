@@ -9,7 +9,7 @@
     "@testing-library/user-event": "^13.5.0",
     "axios": "^1.4.0",
     "bootstrap": "5.1",
-    "chart.js": "^4.3.0",
+    "chart.js": "^3.9.1",
     "leaflet": "^1.9.4",
     "react": "^18.2.0",
     "react-bootstrap": "^2.7.4",
@@ -47,6 +47,10 @@
     "@babel/plugin-proposal-optional-chaining": "^7.21.0",
     "@babel/preset-env": "^7.23.9"
   },
-  "presets": ["@babel/preset-env"],
-  "plugins": ["@babel/plugin-proposal-optional-chaining"]
+  "presets": [
+    "@babel/preset-env"
+  ],
+  "plugins": [
+    "@babel/plugin-proposal-optional-chaining"
+  ]
 }
