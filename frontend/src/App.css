@@ -7,9 +7,36 @@
   pointer-events: none;
 }
 
+.custom-input {
+  height: 40px;
+  font-size: 16px;
+}
+
+.header-container {
+  display: block;
+  align-items: center;
+  gap: 800px;
+  margin-top: 22px;
+}
+
+.search-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 22px;
+}
+
+.search-input {
+  height: 40px;
+}
+
+.search-button {
+  height: 40px;
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .App-logo {
-    animation: App-logo-spin infinite 20s linear;
+    animation: App-logo-spin infinite 5s linear;
   }
 }
 
@@ -91,7 +118,7 @@ table {
 }
 
 thead {
-  background-color: #287fc8;
+  background-color: rgb(7, 101, 1);
   color: white;
 }
 
@@ -102,10 +129,10 @@ td {
 }
 
 tr:nth-child(even) {
-  background-color: #287fc8;
+  background-color: rgb(7, 143, 1);
   color: white;
 }
 
 tr:hover {
-  background-color: #24bdbd;
+  background-color: rgba(8, 180, 0, 0.75);
 }

@@ -1,12 +1,12 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet';
+import React, {useState, useEffect, useCallback} from 'react';
+import {MapContainer, TileLayer, Marker, Popup, useMapEvents} from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Bar } from 'react-chartjs-2';
-import Chart from 'chart.js/auto';
+import {Bar} from 'react-chartjs-2';
 
 import icon from 'leaflet/dist/images/marker-icon.png';
 import iconShadow from 'leaflet/dist/images/marker-shadow.png';
+import logo from './logo_final.png';
 
 let DefaultIcon = L.icon({
     iconUrl: icon,
@@ -15,7 +15,7 @@ let DefaultIcon = L.icon({
 
 L.Marker.prototype.options.icon = DefaultIcon;
 
-function LocationMarker({ setPosition }) {
+function LocationMarker({setPosition}) {
     useMapEvents({
         click(e) {
             setPosition([e.latlng.lat, e.latlng.lng]);
@@ -25,6 +25,33 @@ function LocationMarker({ setPosition }) {
     return null;
 }
 
+const AdsensePopup = ({onClose}) => {
+    return (
+        <div style={{
+            position: 'fixed',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            backgroundColor: 'grey',
+            padding: '20px',
+            zIndex: 1000,
+        }}>
+            <h2>Google Adsense Werbung</h2>
+            <p>Dies ist ein simuliertes Adsense-Ad für Demonstrationszwecke.</p>
+            <button onClick={onClose}>Schließen</button>
+        </div>
+    );
+};
+
+const Legend = () => (
+    <div style={{marginTop: '20px', textAlign: 'center'}}>
+        <div><span style={{color: 'lightgray'}}>■</span> Stufe 0</div>
+        <div><span style={{color: 'green'}}>■</span> Stufe 1-2</div>
+        <div><span style={{color: 'orange'}}>■</span> Stufe 3-4</div>
+        <div><span style={{color: 'red'}}>■</span> Stufe 5 und darüber</div>
+    </div>
+);
+
 const Dashboard = () => {
     const [position, setPosition] = useState([51.1657, 10.4515]);
     const [zoom] = useState(6);
@@ -33,6 +60,7 @@ const Dashboard = () => {
     const [view, setView] = useState('data'); // 'data' für Pollendaten, 'chart' für den Graphen
     const [currentDay, setCurrentDay] = useState('today');
     const [selectedPollenTypes, setSelectedPollenTypes] = useState([]);
+    const [searchAddress, setSearchAddress] = useState('');
 
     const updateLocationInfo = useCallback(async (latitude, longitude) => {
         const region = await getRegionNameFromCoords(latitude, longitude);
@@ -41,6 +69,41 @@ const Dashboard = () => {
             fetchPollenDataForRegion(region);
         }
     }, []);
+
+    const [showAdPopup, setShowAdPopup] = useState(true); // Zustand für die Anzeige des Popups
+
+    const handleCloseAdPopup = () => {
+        setShowAdPopup(false); // Schließt das Popup
+    };
+
+    const getColorForLevel = (level) => {
+        if (level >= 5) {
+            return 'red'; // Für Stufe 5 und darüber
+        } else if (level >= 3) {
+            return 'orange'; // Für Stufe 3 und 4
+        } else if (level >= 1) {
+            return 'green'; // Für Stufe 1 und 2
+        } else {
+            return 'lightgray'; // Für Stufe 0
+        }
+    };
+
+    const searchLocation = async () => {
+        const url = `https://nominatim.openstreetmap.org/search?format=json&q=${searchAddress}`;
+        try {
+            const response = await fetch(url);
+            const data = await response.json();
+            if (data.length > 0) {
+                const {lat, lon} = data[0];
+                setPosition([parseFloat(lat), parseFloat(lon)]);
+                updateLocationInfo(parseFloat(lat), parseFloat(lon));
+            } else {
+                alert('Kein Ort gefunden.');
+            }
+        } catch (error) {
+            console.error('Fehler beim Suchen des Ortes:', error);
+        }
+    };
 
     const getRegionNameFromCoords = async (latitude, longitude) => {
         const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=6&addressdetails=1`;
@@ -103,6 +166,10 @@ const Dashboard = () => {
 
     // Zusätzliche Funktion zum Rendern des Graphen
     const renderChart = () => {
+        if (selectedPollenTypes.length === 0) {
+            return <p>Bitte wählen Sie mindestens einen Pollentyp aus.</p>;
+        }
+
         const allLabels = pollenData ? Object.keys(pollenData.Pollen) : [];
         const labels = allLabels.filter(label => selectedPollenTypes.includes(label)); // Filter basierend auf ausgewählten Typen
 
@@ -121,45 +188,56 @@ const Dashboard = () => {
                 dayData = []; // Fallback, sollte nicht erreicht werden
         }
 
+        const backgroundColors = dayData.map(level => getColorForLevel(level));
+
         const data = {
             labels,
             datasets: [
                 {
                     label: `Pollenbelastung ${currentDay === 'today' ? 'heute' : currentDay === 'tomorrow' ? 'morgen' : 'übermorgen'}`,
                     data: dayData,
-                    backgroundColor: 'rgba(173, 216, 230, 0.5)',
+                    backgroundColor: backgroundColors,
                 },
             ],
         };
-
-        return <Bar data={data} />;
+        return (<div>
+            <Bar data={data}/>
+            <Legend/>
+        </div>);
     };
 
     // Tabelle für Pollendaten
     const renderDataTable = () => {
+        if (selectedPollenTypes.length === 0) {
+            return <p>Bitte wählen Sie mindestens einen Pollentyp aus.</p>;
+        }
+
         return (
-            <table>
-                <thead>
-                <tr>
-                    <th>Pollenart</th>
-                    <th>Heute</th>
-                    <th>Morgen</th>
-                    <th>Übermorgen</th>
-                </tr>
-                </thead>
-                <tbody>
-                {pollenData && Object.entries(pollenData.Pollen)
-                    .filter(([pollenType]) => selectedPollenTypes.includes(pollenType))
-                    .map(([pollenType, data]) => (
-                        <tr key={pollenType}>
-                            <td>{pollenType}</td>
-                            <td>{data.today}</td>
-                            <td>{data.tomorrow}</td>
-                            <td>{data.dayafter_to}</td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
+            <div>
+                <table>
+                    <thead>
+                    <tr>
+                        <th>Pollenart</th>
+                        <th>Heute</th>
+                        <th>Morgen</th>
+                        <th>Übermorgen</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {pollenData && Object.entries(pollenData.Pollen)
+                        .filter(([pollenType]) => selectedPollenTypes.includes(pollenType))
+                        .map(([pollenType, data]) => (
+                            <tr key={pollenType}>
+                                <td>{pollenType}</td>
+                                <td style={{backgroundColor: getColorForLevel(data.today)}}>{data.today}</td>
+                                <td style={{backgroundColor: getColorForLevel(data.today)}}>{data.tomorrow}</td>
+                                <td style={{backgroundColor: getColorForLevel(data.today)}}>{data.dayafter_to}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+                <Legend/>
+            </div>
         );
     };
 
@@ -181,19 +259,19 @@ const Dashboard = () => {
         if (!pollenData) return null;
 
         return (
-            <div style={{ marginLeft: '50px' }}>
-                <p style={{ color: 'white', margin: '0 0 10px 0', textAlign:'center'}}>Typen</p>
-                <div style={{ border: '1px solid white', padding: '10px' ,display: 'inline-flex'}}>
-                    <div style={{ display: 'flex', flexWrap: 'wrap' }}>
+            <div style={{marginLeft: '50px'}}>
+                <p style={{color: 'white', margin: '0 0 10px 0', textAlign: 'center'}}>Typen</p>
+                <div style={{border: '1px solid white', padding: '10px', display: 'inline-flex'}}>
+                    <div style={{display: 'flex', flexWrap: 'wrap'}}>
                         {Object.keys(pollenData.Pollen).map(pollenType => (
-                            <div key={pollenType} style={{ marginRight: '20px', display: 'flex', alignItems: 'center' }}>
+                            <div key={pollenType} style={{marginRight: '20px', display: 'flex', alignItems: 'center'}}>
                                 <input
                                     type="checkbox"
-                                    style={{ marginRight: '10px' }} // Abstand zwischen Checkbox und Text
+                                    style={{marginRight: '10px'}} // Abstand zwischen Checkbox und Text
                                     checked={selectedPollenTypes.includes(pollenType)}
                                     onChange={() => handlePollenTypeChange(pollenType)}
                                 />
-                                <label style={{ color: 'white' }}>{pollenType}</label>
+                                <label style={{color: 'white'}}>{pollenType}</label>
                             </div>
                         ))}
                     </div>
@@ -204,14 +282,33 @@ const Dashboard = () => {
 
     return (
         <div>
-            <h2 style={{ padding: 25 }}><b>Willkommen auf der PollenMap</b></h2>
-            {renderPollenTypeCheckboxes()}
-            <MapContainer center={position} zoom={zoom} style={{ height: '88vh', width: '100%' }}>
+            {showAdPopup && <AdsensePopup onClose={handleCloseAdPopup}/>}
+            <div className="header-container">
+                <div style={{position: 'absolute', top: '0px', left: '550px', padding: '10px'}}>
+                    <img src={logo} alt="Logo" className="App-logo" style={{height: '150px'}}/>
+                </div>
+                <h2 style={{padding: 25}}><b>Willkommen auf der PollenMap</b></h2>
+            </div>
+            <div style={{display: 'flex', justifyContent: 'center', margin: '20px 0'}}>
+                <div className="search-container">
+                    <input
+                        type="text"
+                        value={searchAddress}
+                        onChange={(e) => setSearchAddress(e.target.value)}
+                        placeholder="Ort suchen..."
+                        className="custom-input"
+                        style={{marginRight: '10px'}}
+                    />
+                    <button onClick={searchLocation}>Suchen</button>
+                </div>
+                {renderPollenTypeCheckboxes()}
+            </div>
+            <MapContainer center={position} zoom={zoom} style={{height: '88vh', width: '100%'}}>
                 <TileLayer
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                     attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                 />
-                <LocationMarker setPosition={setPosition} />
+                <LocationMarker setPosition={setPosition}/>
                 <Marker position={position}>
                     <Popup>
                         {view === 'data' ? (
